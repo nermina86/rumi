@@ -1,4 +1,3 @@
-//
 //  ContentView.swift
 //  Single-file SwiftUI app (iOS / iPadOS) for a doll dress-up game.
 //
@@ -13,6 +12,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 // MARK: - Models
 
@@ -33,7 +33,7 @@ struct ClothingItem: Identifiable, Hashable {
     }
     
     let id = UUID()
-    let name: String        // Asset name in the catalog / xcassets
+    let name: String
     let category: Category
 }
 
@@ -135,23 +135,28 @@ final class DressUpViewModel: ObservableObject {
     }
 }
 
+// MARK: - Share (Identifiable payload for reliable iPad first-tap)
+
+struct SharePayload: Identifiable {
+    let id = UUID()
+    let items: [Any]
+}
+
 // MARK: - ContentView
 
 struct ContentView: View {
     @StateObject private var vm = DressUpViewModel()
-    @State private var exportURL: URL?
-    @State private var isSharing = false
+    @State private var sharePayload: SharePayload?   // <- .sheet(item:) friendly
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Fancy header
                 AppHeader(
                     title: "Rumy DressUp",
                     iconSystemName: "tshirt",
                     onReset: { vm.reset() },
                     onRandom: { vm.randomize() },
-                    onExport: { exportOutfitImage() }
+                    onExport: { shareText() }   // text-only share
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -187,10 +192,9 @@ struct ContentView: View {
                     }
                 }
             }
-            .sheet(isPresented: $isSharing) {
-                if let exportURL {
-                    ShareSheet(activityItems: [exportURL])
-                }
+            // Use .sheet(item:) so the first tap presents reliably on iPad
+            .sheet(item: $sharePayload) { payload in
+                ShareSheet(items: payload.items)
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -202,20 +206,15 @@ struct ContentView: View {
         size.width < 740 ? 112 : 210
     }
     
-    private func exportOutfitImage() {
-        let renderer = ImageRenderer(content:
-            DollCanvas(equipped: vm.equipped)
-                .frame(width: 1200, height: 1800)
-                .background(Color.clear)
-        )
-        renderer.scale = 1.0
-        guard let uiImage = renderer.uiImage else { return }
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("RumyOutfit-\(UUID().uuidString.prefix(6)).png")
-        if let data = uiImage.pngData() {
-            try? data.write(to: url)
-            self.exportURL = url
-            self.isSharing = true
+    // MARK: - Share text (no image); Dispatch to main to avoid first-tap no-op
+    private func shareText() {
+        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX" // replace when ready
+        let message = """
+        Hey! Check out this cute Rumi dress-up app 👗✨
+        Create outfits, style and share looks! 
+        """
+        DispatchQueue.main.async {
+            self.sharePayload = SharePayload(items: [message])
         }
     }
 }
@@ -250,7 +249,7 @@ struct AppHeader: View {
             HStack(spacing: 8) {
                 HeaderButton(systemName: "arrow.counterclockwise", label: "Reset", action: onReset)
                 HeaderButton(systemName: "wand.and.stars", label: "Random", action: onRandom)
-                HeaderButton(systemName: "square.and.arrow.up.on.square", label: "Print", action: onExport)
+                HeaderButton(systemName: "square.and.arrow.up", label: "Share", action: onExport)
             }
         }
         .padding(.vertical, 4)
@@ -458,12 +457,14 @@ struct BlurView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIVisualEffectView { UIVisualEffectView(effect: UIBlurEffect(style: style)) }
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) { }
 }
+
+// GoodDeeds-style ShareSheet
 struct ShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
+    let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) { }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) { }
 }
 
 // MARK: - Previews
