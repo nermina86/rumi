@@ -156,7 +156,7 @@ struct ContentView: View {
                     iconSystemName: "tshirt",
                     onReset: { vm.reset() },
                     onRandom: { vm.randomize() },
-                    onExport: { shareText() }   // text-only share
+                    onExport: { shareText() }
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -192,7 +192,6 @@ struct ContentView: View {
                     }
                 }
             }
-            // Use .sheet(item:) so the first tap presents reliably on iPad
             .sheet(item: $sharePayload) { payload in
                 ShareSheet(items: payload.items)
             }
@@ -206,12 +205,11 @@ struct ContentView: View {
         size.width < 740 ? 112 : 210
     }
     
-    // MARK: - Share text (no image); Dispatch to main to avoid first-tap no-op
     private func shareText() {
-        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX" // replace when ready
+        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX"
         let message = """
         Hey! Check out this cute Rumi dress-up app 👗✨
-        Create outfits, style and share looks! 
+        Create outfits, style and share looks! \(appURL)
         """
         DispatchQueue.main.async {
             self.sharePayload = SharePayload(items: [message])
@@ -238,40 +236,38 @@ struct AppHeader: View {
             
             Text(title)
                 .font(.largeTitle.bold())
-                .foregroundStyle(
-                    LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing)
-                )
+                .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .leading, endPoint: .trailing))
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             
             Spacer()
             
-            HStack(spacing: 8) {
-                HeaderButton(systemName: "arrow.counterclockwise", label: "Reset", action: onReset)
-                HeaderButton(systemName: "wand.and.stars", label: "Random", action: onRandom)
-                HeaderButton(systemName: "square.and.arrow.up", label: "Share", action: onExport)
+            HStack(spacing: 12) {
+                HeaderIconButton(systemName: "arrow.counterclockwise", label: "Reset", action: onReset)
+                HeaderIconButton(systemName: "wand.and.stars", label: "Random", action: onRandom)
+                HeaderIconButton(systemName: "square.and.arrow.up", label: "Share", action: onExport)
             }
         }
         .padding(.vertical, 4)
     }
 }
 
-private struct HeaderButton: View {
+private struct HeaderIconButton: View {
     let systemName: String
     let label: String
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: systemName)
-                    .font(.body.weight(.semibold))
-                Text(label)
-                    .font(.callout.weight(.semibold))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: Capsule())
+            Image(systemName: systemName)
+                .font(.body.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.28), lineWidth: 0.6))
+                .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+                .contentShape(Capsule())
+                .accessibilityLabel(Text(label))
         }
         .buttonStyle(.plain)
     }
@@ -321,18 +317,23 @@ private struct LayeredImage: View {
     }
 }
 
-// MARK: - Wardrobe & Helpers
+// MARK: - Wardrobe Column with tappable arrows
 
-private struct ContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-private struct ScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+private struct ScrollHint: View {
+    enum Direction { case up, down }
+    let direction: Direction
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: direction == .up ? "chevron.up" : "chevron.down")
+                .font(.system(size: 24, weight: .bold))
+                .padding(12)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 0.8))
+                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -349,72 +350,92 @@ struct WardrobeColumn: View {
     private var canScrollUp: Bool { scrollOffset > 2 }
     private var canScrollDown: Bool { (contentHeight - scrollOffset - containerHeight) > 2 }
     private var coordSpaceName: String { "wardrobeScroll.\(title)" }
+    private var topAnchorId: String { "wardrobeTop.\(title)" }
+    private var bottomAnchorId: String { "wardrobeBottom.\(title)" }
     
     var body: some View {
         VStack(spacing: 0) {
             Text(title)
                 .font(.headline)
                 .padding(.top, 8)
-            ZStack {
-                GeometryReader { outerGeo in
-                    ScrollView {
-                        Color.clear.frame(height: 0)
+            
+            ScrollViewReader { proxy in
+                ZStack {
+                    GeometryReader { outerGeo in
+                        ScrollView {
+                            Color.clear.frame(height: 0).id(topAnchorId)
+                            
+                            Color.clear.frame(height: 0)
+                                .background(
+                                    GeometryReader { g in
+                                        Color.clear
+                                            .preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named(coordSpaceName)).minY)
+                                    }
+                                )
+                            
+                            LazyVStack(spacing: 12) {
+                                ForEach(items) { item in
+                                    WardrobeCell(
+                                        item: item,
+                                        isSelected: isSelected(item),
+                                        action: { tapped(item) }
+                                    )
+                                    .padding(.horizontal, 8)
+                                }
+                            }
+                            .padding(.vertical, 8)
                             .background(
                                 GeometryReader { g in
-                                    Color.clear
-                                        .preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named(coordSpaceName)).minY)
+                                    Color.clear.preference(key: ContentHeightKey.self, value: g.size.height)
                                 }
                             )
-                        LazyVStack(spacing: 12) {
-                            ForEach(items) { item in
-                                WardrobeCell(
-                                    item: item,
-                                    isSelected: isSelected(item),
-                                    action: { tapped(item) }
-                                )
-                                .padding(.horizontal, 8)
-                            }
+                            
+                            Color.clear.frame(height: 0).id(bottomAnchorId)
                         }
-                        .padding(.vertical, 8)
-                        .background(
-                            GeometryReader { g in
-                                Color.clear.preference(key: ContentHeightKey.self, value: g.size.height)
-                            }
-                        )
+                        .coordinateSpace(name: coordSpaceName)
+                        .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                        .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+                        .onChange(of: outerGeo.size.height) { _, newHeight in
+                            containerHeight = newHeight
+                        }
+                        .onAppear { containerHeight = outerGeo.size.height }
                     }
-                    .coordinateSpace(name: coordSpaceName)
-                    .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
-                    .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
-                    .onChange(of: outerGeo.size.height) { _, newHeight in
-                        containerHeight = newHeight
-                    }
-                    .onAppear { containerHeight = outerGeo.size.height }
-                }
-                if canScrollUp {
-                    VStack { LinearGradient(gradient: Gradient(colors: [Color(UIColor.systemBackground).opacity(0.95), .clear]), startPoint: .top, endPoint: .bottom).frame(height: 24); Spacer() }
+                    
+                    if canScrollUp {
+                        VStack {
+                            LinearGradient(gradient: Gradient(colors: [Color(UIColor.systemBackground).opacity(0.95), .clear]),
+                                           startPoint: .top, endPoint: .bottom)
+                                .frame(height: 36)
+                            Spacer()
+                        }
                         .overlay(alignment: .top) {
-                            Image(systemName: "chevron.up")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(6)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .padding(.top, 2)
+                            ScrollHint(direction: .up) {
+                                withAnimation(.easeInOut(duration: 0.4)) {
+                                    proxy.scrollTo(topAnchorId, anchor: .top)
+                                }
+                            }
+                            .padding(.top, 2)
                         }
-                }
-                if canScrollDown {
-                    VStack { Spacer(); LinearGradient(gradient: Gradient(colors: [.clear, Color(UIColor.systemBackground).opacity(0.95)]), startPoint: .top, endPoint: .bottom).frame(height: 24) }
+                    }
+                    
+                    if canScrollDown {
+                        VStack {
+                            Spacer()
+                            LinearGradient(gradient: Gradient(colors: [.clear, Color(UIColor.systemBackground).opacity(0.95)]),
+                                           startPoint: .top, endPoint: .bottom)
+                                .frame(height: 36)
+                        }
                         .overlay(alignment: .bottom) {
-                            Image(systemName: "chevron.down")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(6)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .padding(.bottom, 2)
+                            ScrollHint(direction: .down) {
+                                withAnimation(.easeInOut(duration: 0.4)) {
+                                    proxy.scrollTo(bottomAnchorId, anchor: .bottom)
+                                }
+                            }
+                            .padding(.bottom, 2)
                         }
+                    }
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: canScrollUp)
-            .animation(.easeInOut(duration: 0.2), value: canScrollDown)
         }
         .background(BlurView(style: .systemThinMaterial))
         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -430,8 +451,13 @@ struct WardrobeCell: View {
         Button(action: action) {
             VStack(spacing: 6) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.0001)).frame(width: 76, height: 76)
-                    Image(item.name).resizable().scaledToFit().frame(width: 72, height: 72)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(0.0001))
+                        .frame(width: 76, height: 76)
+                    Image(item.name)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 72, height: 72)
                 }
                 Text(itemDisplayName)
                     .font(.caption2)
@@ -440,13 +466,17 @@ struct WardrobeCell: View {
                     .frame(width: 82)
             }
             .padding(6)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 10)
+                .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
     }
     private var itemDisplayName: String {
-        item.name.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
-            .split(separator: " ").map { $0.localizedCapitalized }.joined(separator: " ")
+        item.name.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { $0.localizedCapitalized }
+            .joined(separator: " ")
     }
 }
 
@@ -458,7 +488,6 @@ struct BlurView: UIViewRepresentable {
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) { }
 }
 
-// GoodDeeds-style ShareSheet
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
