@@ -5,21 +5,10 @@
 //  ✅ Drop this ONE file into your SwiftUI target.
 //  ✅ Add PNG assets to Assets.xcassets with these names:
 //     - "dollBase"
-//     - "top_white_tshirt"
-//     - "top_yellow_jacket"
-//     - "bottom_white_skirt"
+//     - "tshirt", "tshirt1", "tshirt2", "jacket"
+//     - "skirt", "shorts", "shorts2"
+//     - "hat1", "hat2", "shoes1", "shoes2", "acc1"
 //  ✅ Build & run. Works on iPhone and iPad.
-//
-//  Features
-//  - Adaptive layout (side wardrobes + center doll)
-//  - Tap to equip/unequip
-//  - Reset & Random outfit
-//  - Auto-persist last outfit across launches
-//  - Export/share rendered outfit as PNG
-//
-//  Notes
-//  - You can add more items by extending `catalog` in `DressUpViewModel`.
-//  - Keep all clothing PNGs aligned and sized to the same canvas as the base.
 //
 
 import SwiftUI
@@ -29,13 +18,14 @@ import UniformTypeIdentifiers
 
 struct ClothingItem: Identifiable, Hashable {
     enum Category: String, CaseIterable, Codable {
-        case top, bottom, hat, shoes, accessory
+        case top, bottom, hat, shoes, accessory, hair
         
         var displayName: String {
             switch self {
             case .top:       return "Tops"
             case .bottom:    return "Bottoms"
             case .hat:       return "Hats"
+            case .hair:      return "Hair"
             case .shoes:     return "Shoes"
             case .accessory: return "Accessories"
             }
@@ -68,9 +58,7 @@ private enum OutfitStore {
 private extension Dictionary {
     func mapKeys<T>(_ transform: (Key) throws -> T) rethrows -> [T: Value] where T: Hashable {
         var new: [T: Value] = [:]
-        for (k, v) in self {
-            new[try transform(k)] = v
-        }
+        for (k, v) in self { new[try transform(k)] = v }
         return new
     }
 }
@@ -86,19 +74,22 @@ final class DressUpViewModel: ObservableObject {
         // Seed catalog with your initial assets (add more freely)
         self.catalog = [
             // Provided starter pieces
-            .init(name: "tshirt", category: .top),
+            .init(name: "tshirt",  category: .top),
             .init(name: "tshirt1", category: .top),
             .init(name: "tshirt2", category: .top),
-            .init(name: "jacket", category: .top),
-            .init(name: "skirt", category: .bottom),
-            .init(name: "shorts", category: .bottom),
+            .init(name: "jacket",  category: .top),
+            .init(name: "skirt",   category: .bottom),
+            .init(name: "shorts",  category: .bottom),
             .init(name: "shorts2", category: .bottom),
+            
             // Optional placeholders (replace with real assets when ready)
-            .init(name: "hat1", category: .hat),
-            .init(name: "hat2", category: .hat),
-            .init(name: "shoes1", category: .shoes),
-            .init(name: "shoes2", category: .shoes),
-            .init(name: "acc1", category: .accessory)
+            .init(name: "hat1",    category: .hat),
+            .init(name: "hat2",    category: .hat),
+            .init(name: "hair",    category: .hat), // hair lives in its own category
+            .init(name: "shoes1",  category: .shoes),
+            .init(name: "shoes2",  category: .shoes),
+            .init(name: "acc1",    category: .accessory),
+            .init(name: "acc2",    category: .accessory)
         ]
         
         // Load persisted outfit if available
@@ -192,10 +183,10 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     
-                    // Right: Hats + Shoes + Accessories
+                    // Right: Hats + Shoes + Accessories (+ Hair)
                     WardrobeColumn(
                         title: "Hats / Shoes / Accessories",
-                        items: vm.items(for: [.hat, .shoes, .accessory]),
+                        items: vm.items(for: [.hat, .hair, .shoes, .accessory]),
                         isSelected: { vm.isEquipped($0) },
                         tapped: { vm.toggle($0) }
                     )
@@ -291,6 +282,7 @@ struct DollCanvas: View {
                 if let hat = equipped[.hat] {
                     LayeredImage(name: hat.name, h: min(g.size.height * 0.92, 700))
                 }
+
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -309,7 +301,23 @@ private struct LayeredImage: View {
     }
 }
 
-// MARK: - Wardrobe
+// MARK: - Scroll measuring (for fade + chevrons)
+
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Wardrobe (with fade + chevron indicators)
 
 struct WardrobeColumn: View {
     let title: String
@@ -317,29 +325,130 @@ struct WardrobeColumn: View {
     let isSelected: (ClothingItem) -> Bool
     let tapped: (ClothingItem) -> Void
     
+    @State private var containerHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var scrollOffset: CGFloat = 0
+    
+    private var canScrollUp: Bool {
+        scrollOffset > 2
+    }
+    private var canScrollDown: Bool {
+        (contentHeight - scrollOffset - containerHeight) > 2
+    }
+    
+    private var coordSpaceName: String { "wardrobeScroll.\(title)" }
+    
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             Text(title)
                 .font(.headline)
-                .padding(.top, 12)
+                .padding(.top, 8)
             
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(items) { item in
-                        WardrobeCell(
-                            item: item,
-                            isSelected: isSelected(item),
-                            action: { tapped(item) }
+            ZStack {
+                GeometryReader { outerGeo in
+                    ScrollView {
+                        // Track scroll offset at the very top of content
+                        Color.clear
+                            .frame(height: 0)
+                            .background(
+                                GeometryReader { g in
+                                    Color.clear
+                                        .preference(
+                                            key: ScrollOffsetKey.self,
+                                            value: -g.frame(in: .named(coordSpaceName)).minY
+                                        )
+                                }
+                            )
+                        
+                        LazyVStack(spacing: 12) {
+                            ForEach(items) { item in
+                                WardrobeCell(
+                                    item: item,
+                                    isSelected: isSelected(item),
+                                    action: { tapped(item) }
+                                )
+                                .padding(.horizontal, 8)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        // Measure total content height
+                        .background(
+                            GeometryReader { g in
+                                Color.clear
+                                    .preference(key: ContentHeightKey.self, value: g.size.height)
+                            }
                         )
-                        .padding(.horizontal, 8)
+                    }
+                    .coordinateSpace(name: coordSpaceName)
+                    .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                    .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+                    .onChange(of: outerGeo.size.height) { _, newHeight in
+                        containerHeight = newHeight
+                    }
+                    .onAppear { containerHeight = outerGeo.size.height }
+                }
+                
+                // ===== Top fade + chevron =====
+                if canScrollUp {
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color(UIColor.systemBackground).opacity(0.95),
+                                Color(UIColor.systemBackground).opacity(0.0)
+                            ]),
+                            startPoint: .top, endPoint: .bottom
+                        )
+                        .frame(height: 24)
+                        .allowsHitTesting(false)
+                        
+                        Spacer()
+                    }
+                    .transition(.opacity)
+                    .overlay(alignment: .top) {
+                        Image(systemName: "chevron.up")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(6)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .padding(.top, 2)
+                            .allowsHitTesting(false)
                     }
                 }
-                .padding(.bottom, 24)
+                
+                // ===== Bottom fade + chevron =====
+                if canScrollDown {
+                    VStack(spacing: 0) {
+                        Spacer()
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color(UIColor.systemBackground).opacity(0.0),
+                                Color(UIColor.systemBackground).opacity(0.95)
+                            ]),
+                            startPoint: .top, endPoint: .bottom
+                        )
+                        .frame(height: 24)
+                        .allowsHitTesting(false)
+                    }
+                    .transition(.opacity)
+                    .overlay(alignment: .bottom) {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(6)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .padding(.bottom, 2)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
+            .animation(.easeInOut(duration: 0.2), value: canScrollUp)
+            .animation(.easeInOut(duration: 0.2), value: canScrollDown)
         }
         .background(BlurView(style: .systemThinMaterial))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(10)
+        .accessibilityElement(children: .contain)
+        .accessibilityHint("Scroll to see more items")
     }
 }
 
@@ -372,7 +481,7 @@ struct WardrobeCell: View {
             .padding(6)
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)
@@ -381,7 +490,6 @@ struct WardrobeCell: View {
     }
     
     private var itemDisplayName: String {
-        // Render nicer titles from asset names like "top_white_tshirt" -> "White T-Shirt"
         item.name
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
@@ -415,7 +523,7 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-// MARK: - Preview
+// MARK: - Previews
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
@@ -428,5 +536,20 @@ struct ContentView_Previews: PreviewProvider {
                 .previewDisplayName("iPad")
                 .previewDevice("iPad (10th generation)")
         }
+    }
+}
+
+struct WardrobeColumn_Previews: PreviewProvider {
+    static var previews: some View {
+        // Preview the wardrobe alone with many items to see arrow indicators
+        WardrobeColumn(
+            title: "Tops / Bottoms",
+            items: (1...24).map { i in ClothingItem(name: "tshirt\(i)", category: .top) },
+            isSelected: { _ in false },
+            tapped: { _ in }
+        )
+        .frame(width: 210, height: 420)
+        .previewLayout(.sizeThatFits)
+        .previewDisplayName("Wardrobe with Scroll Arrows")
     }
 }
