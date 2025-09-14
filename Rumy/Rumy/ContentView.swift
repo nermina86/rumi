@@ -13,7 +13,7 @@ struct ClothingItem: Identifiable, Hashable {
             case .top:       return "Tops"
             case .bottom:    return "Bottoms"
             case .hat:       return "Hats"
-            case .hair:      return "Hair"
+            case .hair:      return "Hats"
             case .shoes:     return "Shoes"
             case .accessory: return "Accessories"
             }
@@ -69,7 +69,7 @@ final class DressUpViewModel: ObservableObject {
             .init(name: "shorts2", category: .bottom),
             .init(name: "hat1",    category: .hat),
             .init(name: "hat2",    category: .hat),
-            .init(name: "hair",    category: .hair),
+            .init(name: "hair",    category: .hat),
             .init(name: "shoes1",  category: .shoes),
             .init(name: "shoes2",  category: .shoes),
             .init(name: "acc1",    category: .accessory),
