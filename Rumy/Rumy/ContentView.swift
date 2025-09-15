@@ -6,14 +6,13 @@ import UIKit
 
 struct ClothingItem: Identifiable, Hashable {
     enum Category: String, CaseIterable, Codable {
-        case top, bottom, hat, shoes, accessory, hair
+        case top, bottom, hat, shoes, accessory
         
         var displayName: String {
             switch self {
             case .top:       return "Tops"
             case .bottom:    return "Bottoms"
             case .hat:       return "Hats"
-            case .hair:      return "Hats"
             case .shoes:     return "Shoes"
             case .accessory: return "Accessories"
             }
@@ -130,7 +129,7 @@ struct SharePayload: Identifiable {
     let items: [Any]
 }
 
-// MARK: - Parental Gate (Year of Birth)
+// MARK: - Parental Gate
 
 struct BirthYearGateView: View {
     @Binding var isUnlocked: Bool
@@ -172,7 +171,6 @@ struct ContentView: View {
     @StateObject private var vm = DressUpViewModel()
     @State private var sharePayload: SharePayload?
     
-    // parental gate states
     @State private var showParentalGate = false
     @State private var parentalGatePassed = false
 
@@ -184,7 +182,7 @@ struct ContentView: View {
                     iconSystemName: "tshirt",
                     onReset: { vm.reset() },
                     onRandom: { vm.randomize() },
-                    onExport: { showParentalGate = true } // 🔒 gated share
+                    onExport: { showParentalGate = true }
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -193,7 +191,7 @@ struct ContentView: View {
                 Divider().opacity(0.25)
                 
                 GeometryReader { geo in
-                    HStack(spacing: 0) {
+                    HStack(alignment: .top, spacing: 0) {
                         WardrobeColumn(
                             title: "Tops / Bottoms",
                             items: vm.items(for: [.top, .bottom]),
@@ -202,17 +200,14 @@ struct ContentView: View {
                         )
                         .frame(width: columnWidth(for: geo.size))
                         
-                        ZStack {
-                            Color(UIColor.systemGroupedBackground)
-                                .ignoresSafeArea()
-                            DollCanvas(equipped: vm.equipped)
-                                .padding()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
+                        DollCanvas(equipped: vm.equipped)
+                            .padding()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
+
                         WardrobeColumn(
-                            title: "Hats / Shoes / Accessories",
-                            items: vm.items(for: [.hat, .hair, .shoes, .accessory]),
+                            title: "Hats / Shoes / Bags",
+                            items: vm.items(for: [.hat, .shoes, .accessory]),
                             isSelected: { vm.isEquipped($0) },
                             tapped: { vm.toggle($0) }
                         )
@@ -220,19 +215,15 @@ struct ContentView: View {
                     }
                 }
             }
-            // parental gate sheet
             .sheet(isPresented: $showParentalGate) {
                 BirthYearGateView(isUnlocked: $parentalGatePassed)
             }
-            // share sheet
             .sheet(item: $sharePayload) { payload in
                 ShareSheet(items: payload.items)
             }
-            // iOS 17+ two-parameter variant; okay on iOS 17, adjust if your min target is 16
-            .onChange(of: parentalGatePassed) { oldValue, newValue in
-                if newValue {
+            .onChange(of: parentalGatePassed) { old, new in
+                if new {
                     shareText()
-                    // reset so next Share requires gate again
                     parentalGatePassed = false
                 }
             }
@@ -243,12 +234,11 @@ struct ContentView: View {
     }
     
     private func columnWidth(for size: CGSize) -> CGFloat {
-        size.width < 740 ? 112 : 210
+        size.width < 740 ? 110 : 250
     }
     
-    // MARK: - Share text
     private func shareText() {
-        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX" // replace with real link
+        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX"
         let message = """
         Hey! Check out this cute Rumi dress-up app 👗✨
         Create outfits, styles and share looks! \(appURL)
@@ -329,31 +319,40 @@ private struct HeaderIconButton: View {
     }
 }
 
-// MARK: - Doll Canvas
+// MARK: - Doll Canvas with radiant background
 
 struct DollCanvas: View {
     let equipped: [ClothingItem.Category: ClothingItem]
     var body: some View {
         GeometryReader { g in
             ZStack {
+                LinearGradient(
+                    colors: [Color.purple.opacity(0.8), Color.pink.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .opacity(0.6)
+                .ignoresSafeArea()
+                
                 Image("dollBase")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: min(g.size.height * 0.92, 700))
+                    .frame(height: min(g.size.height * 0.95, 850))
+                
                 if let bottom = equipped[.bottom] {
-                    LayeredImage(name: bottom.name, h: min(g.size.height * 0.92, 700))
+                    LayeredImage(name: bottom.name, h: min(g.size.height * 0.95, 850))
                 }
                 if let top = equipped[.top] {
-                    LayeredImage(name: top.name, h: min(g.size.height * 0.92, 700))
+                    LayeredImage(name: top.name, h: min(g.size.height * 0.95, 850))
                 }
                 if let shoes = equipped[.shoes] {
-                    LayeredImage(name: shoes.name, h: min(g.size.height * 0.92, 700))
+                    LayeredImage(name: shoes.name, h: min(g.size.height * 0.95, 850))
                 }
                 if let acc = equipped[.accessory] {
-                    LayeredImage(name: acc.name, h: min(g.size.height * 0.92, 700))
+                    LayeredImage(name: acc.name, h: min(g.size.height * 0.95, 850))
                 }
                 if let hat = equipped[.hat] {
-                    LayeredImage(name: hat.name, h: min(g.size.height * 0.92, 700))
+                    LayeredImage(name: hat.name, h: min(g.size.height * 0.95, 850))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -373,7 +372,7 @@ private struct LayeredImage: View {
     }
 }
 
-// MARK: - Preference Keys (needed for wardrobe fade arrows)
+// MARK: - Preference Keys
 
 private struct ContentHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -389,7 +388,7 @@ private struct ScrollOffsetKey: PreferenceKey {
     }
 }
 
-// MARK: - Wardrobe & Helpers
+// MARK: - Wardrobe & Helpers (with purple dividers)
 
 struct WardrobeColumn: View {
     let title: String
@@ -410,6 +409,7 @@ struct WardrobeColumn: View {
             Text(title)
                 .font(.headline)
                 .padding(.top, 8)
+            
             ZStack {
                 GeometryReader { outerGeo in
                     ScrollView {
@@ -423,14 +423,22 @@ struct WardrobeColumn: View {
                                         )
                                 }
                             )
+                        
                         LazyVStack(spacing: 12) {
-                            ForEach(items) { item in
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 WardrobeCell(
                                     item: item,
                                     isSelected: isSelected(item),
                                     action: { tapped(item) }
                                 )
                                 .padding(.horizontal, 8)
+                                
+                                // purple divider between items
+                                if index < items.count - 1 {
+                                    Divider()
+                                        .background(Color.purple)
+                                        .padding(.horizontal, 20)
+                                }
                             }
                         }
                         .padding(.vertical, 8)
@@ -444,17 +452,12 @@ struct WardrobeColumn: View {
                         )
                     }
                     .coordinateSpace(name: coordSpaceName)
-                    .onPreferenceChange(ScrollOffsetKey.self) { new in
-                        scrollOffset = new
-                    }
-                    .onPreferenceChange(ContentHeightKey.self) { new in
-                        contentHeight = new
-                    }
-                    .onChange(of: outerGeo.size.height) { _, newHeight in
-                        containerHeight = newHeight
-                    }
+                    .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+                    .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+                    .onChange(of: outerGeo.size.height) { _, h in containerHeight = h }
                     .onAppear { containerHeight = outerGeo.size.height }
                 }
+                
                 if canScrollUp {
                     VStack {
                         LinearGradient(
@@ -473,6 +476,7 @@ struct WardrobeColumn: View {
                             .padding(.top, 2)
                     }
                 }
+                
                 if canScrollDown {
                     VStack {
                         Spacer()
@@ -495,42 +499,56 @@ struct WardrobeColumn: View {
             .animation(.easeInOut(duration: 0.2), value: canScrollUp)
             .animation(.easeInOut(duration: 0.2), value: canScrollDown)
         }
-        .background(BlurView(style: .systemThinMaterial))
+        // radiant panel background
+        .background(
+            LinearGradient(
+                colors: [Color.purple.opacity(0.85), Color.pink.opacity(0.75)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(10)
+        .shadow(radius: 4, y: 2)
     }
 }
+
 
 struct WardrobeCell: View {
     let item: ClothingItem
     let isSelected: Bool
     let action: () -> Void
+    
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.white.opacity(0.0001))
-                        .frame(width: 76, height: 76)
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                    
                     Image(item.name)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 72, height: 72)
+                        .shadow(radius: 2)
                 }
+                
                 Text(itemDisplayName)
-                    .font(.caption2)
+                    .font(.footnote)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .frame(width: 82)
             }
             .padding(6)
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.blue : Color.gray.opacity(1), lineWidth: 2)
             )
         }
         .buttonStyle(.plain)
     }
+    
     private var itemDisplayName: String {
         item.name
             .replacingOccurrences(of: "_", with: " ")
@@ -540,6 +558,8 @@ struct WardrobeCell: View {
             .joined(separator: " ")
     }
 }
+
+
 
 // MARK: - Blur + Share
 
