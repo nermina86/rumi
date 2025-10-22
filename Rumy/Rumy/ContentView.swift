@@ -1,3 +1,7 @@
+//Copyright © 2025 by Nermina Memišević
+//All rights reserved. No part of this work may be reproduced,
+//distributed, or transmitted in any form or by any means 
+
 import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
@@ -6,13 +10,14 @@ import UIKit
 
 struct ClothingItem: Identifiable, Hashable {
     enum Category: String, CaseIterable, Codable {
-        case top, bottom, hat, shoes, accessory
+        case top, bottom, hat, hair, shoes, accessory
         
         var displayName: String {
             switch self {
             case .top:       return "Tops"
             case .bottom:    return "Bottoms"
             case .hat:       return "Hats"
+            case .hair:      return "Hair"
             case .shoes:     return "Shoes"
             case .accessory: return "Accessories"
             }
@@ -68,7 +73,8 @@ final class DressUpViewModel: ObservableObject {
             .init(name: "shorts2", category: .bottom),
             .init(name: "hat1",    category: .hat),
             .init(name: "hat2",    category: .hat),
-            .init(name: "hair",    category: .hat),
+            .init(name: "hair",    category: .hair),
+            .init(name: "hair2",   category: .hair),
             .init(name: "shoes1",  category: .shoes),
             .init(name: "shoes2",  category: .shoes),
             .init(name: "acc1",    category: .accessory),
@@ -206,8 +212,8 @@ struct ContentView: View {
                         
 
                         WardrobeColumn(
-                            title: "Hats / Shoes / Bags",
-                            items: vm.items(for: [.hat, .shoes, .accessory]),
+                            title: "Hats/Shoes/Bags",
+                            items: vm.items(for: [.hat, .shoes, .hair, .accessory]),
                             isSelected: { vm.isEquipped($0) },
                             tapped: { vm.toggle($0) }
                         )
@@ -238,9 +244,9 @@ struct ContentView: View {
     }
     
     private func shareText() {
-        let appURL = "https://apps.apple.com/app/idXXXXXXXXXX"
+        let appURL = "https://apps.apple.com/app/rummy-dressup/id6752292318"
         let message = """
-        Hey! Check out this cute Rumi dress-up app 👗✨
+        Hey! Check out this HUNDRIX Rumi dress-up app 👗✨
         Create outfits, styles and share looks! \(appURL)
         """
         DispatchQueue.main.async {
@@ -350,6 +356,9 @@ struct DollCanvas: View {
                 }
                 if let acc = equipped[.accessory] {
                     LayeredImage(name: acc.name, h: min(g.size.height * 0.95, 850))
+                }
+                if let hair = equipped[.hair] {
+                    LayeredImage(name: hair.name, h: min(g.size.height * 0.95, 850))
                 }
                 if let hat = equipped[.hat] {
                     LayeredImage(name: hat.name, h: min(g.size.height * 0.95, 850))
@@ -513,7 +522,6 @@ struct WardrobeColumn: View {
     }
 }
 
-
 struct WardrobeCell: View {
     let item: ClothingItem
     let isSelected: Bool
@@ -558,8 +566,6 @@ struct WardrobeCell: View {
             .joined(separator: " ")
     }
 }
-
-
 
 // MARK: - Blur + Share
 
